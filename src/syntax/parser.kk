@@ -1575,13 +1575,17 @@ pub fun parse-program() : <div,parser> program
   // A doc comment preceding the leading import block is treated as a
   // module-level doc (file header), rather than being attached to an import.
   var module-doc : maybe<string> := Nothing
-  // Parse imports at the top of the file (leading doc comments allowed)
-  while { match peek() { TkImport -> True; TkFrom -> True; TkExtern -> True; TkDocComment(_) -> True; _ -> False } }
+  var seen-import := False
+  // Parse imports at the top of the file (leading doc comments allowed, but
+  // only before the first import — a doc comment after imports have started
+  // belongs to whatever declaration follows, not the module).
+  while { match peek() { TkImport -> True; TkFrom -> True; TkExtern -> True; TkDocComment(_) -> !seen-import; _ -> False } }
     match peek()
       TkDocComment(txt) ->
         advance()
         module-doc := (match module-doc { Just(prev) -> Just(prev ++ "\n" ++ txt); Nothing -> Just(txt) })
       _ ->
+        seen-import := True
         imports := Cons(parse-import-decl(), imports)
   
   var current-doc : maybe<string> := Nothing

@@ -36,7 +36,7 @@ import http
 import semantics/analyser
 import semantics/docgen
 
-val version = "0.49.9"
+val version = "0.49.10"
 
 // Clean process exit without throwing exceptions
 extern hica-exit( code : int ) : a
@@ -545,7 +545,7 @@ fun cmd-analyse( file : string, format-str : string, top-n-str : maybe<string>, 
   val user-decls = typed-prog.decls.drop(prelude.decls.length + imported-decls.length)
   val user-structs = typed-prog.structs.drop(prelude.structs.length + imported-structs.length)
   val user-types = typed-prog.types.drop(prelude.types.length + imported-types.length)
-  val user-prog = typed-prog(decls = user-decls, structs = user-structs, types = user-types, effects = imported-effects ++ prog.effects, imports = prog.imports)
+  val user-prog = typed-prog(decls = user-decls, structs = user-structs, types = user-types, effects = imported-effects ++ prog.effects, imports = prog.imports, module-doc = prog.module-doc)
   val extra-effectful = collect-extern-effectful(prog.imports, dir.path, dep-includes)
   
   if document-flag then

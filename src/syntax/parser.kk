@@ -1572,9 +1572,17 @@ pub fun parse-program() : <div,parser> program
   var globals := []
   var tests := []
   var imports := []
-  // Parse imports at the top of the file
-  while { match peek() { TkImport -> True; TkFrom -> True; TkExtern -> True; _ -> False } }
-    imports := Cons(parse-import-decl(), imports)
+  // A doc comment preceding the leading import block is treated as a
+  // module-level doc (file header), rather than being attached to an import.
+  var module-doc : maybe<string> := Nothing
+  // Parse imports at the top of the file (leading doc comments allowed)
+  while { match peek() { TkImport -> True; TkFrom -> True; TkExtern -> True; TkDocComment(_) -> True; _ -> False } }
+    match peek()
+      TkDocComment(txt) ->
+        advance()
+        module-doc := (match module-doc { Just(prev) -> Just(prev ++ "\n" ++ txt); Nothing -> Just(txt) })
+      _ ->
+        imports := Cons(parse-import-decl(), imports)
   
   var current-doc : maybe<string> := Nothing
   // Parse remaining declarations
@@ -1687,7 +1695,7 @@ pub fun parse-program() : <div,parser> program
           ()
         decls := Cons(parse-fun-decl(current-doc), decls)
         current-doc := Nothing
-  Program(structs.reverse, types = types.reverse, effects = effects.reverse, decls = decls.reverse, globals = globals.reverse, tests = tests.reverse, imports = imports.reverse)
+  Program(structs.reverse, types = types.reverse, effects = effects.reverse, decls = decls.reverse, globals = globals.reverse, tests = tests.reverse, imports = imports.reverse, module-doc = module-doc)
 
 // ---------------------------------------------------------------------------
 // Runner: handle the parser effect over a token list

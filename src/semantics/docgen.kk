@@ -143,6 +143,9 @@ pub fun generate-architecture-md( prog : program, source : string, file : string
   
   md := md ++ "## Module Overview\n"
   md := md ++ "- **Source File:** `" ++ file ++ "`\n"
+  match prog.module-doc
+    Just(doc) -> md := md ++ "\n" ++ doc ++ "\n"
+    Nothing -> ()
   if !prog.imports.is-nil then
     md := md ++ "## Dependencies\n"
     prog.imports.foreach fn(imp)

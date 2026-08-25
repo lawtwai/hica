@@ -551,6 +551,7 @@ pub struct program
   globals : list<global-decl> = []
   tests   : list<test-decl> = []
   imports : list<import-decl> = []
+  module-doc : maybe<string> = Nothing
 
 pub fun program/show( prg : program ) : div string
   val import-strs = prg.imports.map(show)

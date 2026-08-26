@@ -19,6 +19,7 @@ pub effect parser
   fun peek() : token-kind
   fun peek-next() : token-kind
   fun peek-newline() : bool  // True if next token is on a new line
+  fun peek-blank-before() : bool  // True if a blank line precedes the next token
   fun advance() : token
   fun current-span() : span
   fun parse-error( msg : string ) : node
@@ -1572,23 +1573,33 @@ pub fun parse-program() : <div,parser> program
   var globals := []
   var tests := []
   var imports := []
-  // A doc comment preceding the leading import block is treated as a
-  // module-level doc (file header), rather than being attached to an import.
+  // Leading doc comments (before the first real declaration) are gathered
+  // here. A run of doc comments immediately followed by an import commits
+  // to the module-level doc (file header). A run followed by a blank line
+  // and then more doc comments flushes the earlier run into the module doc
+  // too, so only the LAST contiguous doc-comment run — the one directly
+  // touching the first declaration — ends up attached to that declaration.
   var module-doc : maybe<string> := Nothing
-  var seen-import := False
-  // Parse imports at the top of the file (leading doc comments allowed, but
-  // only before the first import — a doc comment after imports have started
-  // belongs to whatever declaration follows, not the module).
-  while { match peek() { TkImport -> True; TkFrom -> True; TkExtern -> True; TkDocComment(_) -> !seen-import; _ -> False } }
+  var pending-doc : maybe<string> := Nothing
+  fun merge-doc( a : maybe<string>, b : maybe<string> ) : maybe<string>
+    match a
+      Just(x) -> match b { Just(y) -> Just(x ++ "\n" ++ y); Nothing -> Just(x) }
+      Nothing -> b
+  // Parse imports at the top of the file (leading doc comments allowed)
+  while { match peek() { TkImport -> True; TkFrom -> True; TkExtern -> True; TkDocComment(_) -> True; _ -> False } }
     match peek()
       TkDocComment(txt) ->
+        if peek-blank-before() && !pending-doc.is-nothing then
+          module-doc := merge-doc(module-doc, pending-doc)
+          pending-doc := Nothing
         advance()
-        module-doc := (match module-doc { Just(prev) -> Just(prev ++ "\n" ++ txt); Nothing -> Just(txt) })
+        pending-doc := (match pending-doc { Just(prev) -> Just(prev ++ "\n" ++ txt); Nothing -> Just(txt) })
       _ ->
-        seen-import := True
+        module-doc := merge-doc(module-doc, pending-doc)
+        pending-doc := Nothing
         imports := Cons(parse-import-decl(), imports)
   
-  var current-doc : maybe<string> := Nothing
+  var current-doc : maybe<string> := pending-doc
   // Parse remaining declarations
   while { match peek() { TkEof -> False; _ -> True } }
     match peek()
@@ -1738,6 +1749,10 @@ pub fun run-parser( tokens : list<token>, action : () -> <div,parser,console> no
       match toks
         Cons(t, _) -> t.newline-before
         Nil        -> False
+    fun peek-blank-before()
+      match toks
+        Cons(t, _) -> t.blank-before
+        Nil        -> False
     fun advance()
       match toks
         Cons(t, rest) -> { toks := rest; t }
@@ -1769,6 +1784,10 @@ pub fun run-parser-program( tokens : list<token>, source : string = "" ) : <div,
     fun peek-newline()
       match toks
         Cons(t, _) -> t.newline-before
+        Nil        -> False
+    fun peek-blank-before()
+      match toks
+        Cons(t, _) -> t.blank-before
         Nil        -> False
     fun advance()
       match toks
@@ -1804,6 +1823,10 @@ pub fun run-parser-program-with-errors( tokens : list<token>, source : string = 
     fun peek-newline()
       match toks
         Cons(t, _) -> t.newline-before
+        Nil        -> False
+    fun peek-blank-before()
+      match toks
+        Cons(t, _) -> t.blank-before
         Nil        -> False
     fun advance()
       match toks
@@ -1864,6 +1887,10 @@ pub fun run-parser-repl( tokens : list<token>, source : string = "" ) : <div,con
       match toks
         Cons(t, _) -> t.newline-before
         Nil        -> False
+    fun peek-blank-before()
+      match toks
+        Cons(t, _) -> t.blank-before
+        Nil        -> False
     fun advance()
       match toks
         Cons(t, rest) -> { toks := rest; t }
@@ -1896,6 +1923,10 @@ pub fun run-parser-repl-tracked( tokens : list<token>, source : string ) : <div,
     fun peek-newline()
       match toks
         Cons(t, _) -> t.newline-before
+        Nil        -> False
+    fun peek-blank-before()
+      match toks
+        Cons(t, _) -> t.blank-before
         Nil        -> False
     fun advance()
       match toks

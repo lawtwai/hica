@@ -107,6 +107,7 @@ pub struct token
   kind : token-kind
   span : span
   newline-before : bool = False
+  blank-before : bool = False
 
 pub fun token/show( t : token ) : string
   t.kind.show
@@ -198,21 +199,23 @@ pub fun token-kind/show( tk : token-kind ) : string
 // ---------------------------------------------------------------------------
 
 pub fun lex( source : string ) : div list<token>
-  lex-from(source.list, 0, False)
+  lex-from(source.list, 0, 0)
 
-// Set newline-before on the first token in a list.
-fun mark-first-nl( tokens : list<token>, nl : bool ) : list<token>
+// Set newline-before/blank-before on the first token in a list, based on the
+// number of consecutive newlines seen right before it (0 = same line,
+// 1 = next line, 2+ = a blank line separates it from the previous token).
+fun mark-first-nl( tokens : list<token>, nl : int ) : list<token>
   match tokens
-    Cons(t, rest) -> Cons(t(newline-before = nl), rest)
+    Cons(t, rest) -> Cons(t(newline-before = nl > 0, blank-before = nl > 1), rest)
     Nil           -> Nil
 
-fun lex-from( cs : list<char>, pos : int, nl : bool = False ) : div list<token>
+fun lex-from( cs : list<char>, pos : int, nl : int = 0 ) : div list<token>
   match cs
-    Nil -> [Token(TkEof, Span(pos, pos), nl)]
+    Nil -> [Token(TkEof, Span(pos, pos), nl > 0, nl > 1)]
     Cons(c, rest) ->
-      if c == '\n' then lex-from(rest, pos + 1, True)
+      if c == '\n' then lex-from(rest, pos + 1, nl + 1)
       elif c.is-white then lex-from(rest, pos + 1, nl)
-      elif c == '/' && rest.head-is('/') && rest.tail.head-is('/') then lex-doc-comment(rest.tail.tail, pos, pos + 3)
+      elif c == '/' && rest.head-is('/') && rest.tail.head-is('/') then mark-first-nl(lex-doc-comment(rest.tail.tail, pos, pos + 3), nl)
       elif c == '/' && rest.head-is('/') then skip-line-comment(rest.tail, pos + 2)
       elif c.is-digit then mark-first-nl(lex-number(cs, pos), nl)
       elif c.is-alpha || c == '_' then mark-first-nl(lex-ident(cs, pos), nl)
@@ -228,7 +231,7 @@ fun head-is( cs : list<char>, ch : char ) : bool
 fun skip-line-comment( cs : list<char>, pos : int ) : div list<token>
   match cs
     Nil             -> [Token(TkEof, Span(pos, pos))]
-    Cons('\n', rest) -> lex-from(rest, pos + 1, True)
+    Cons('\n', rest) -> lex-from(rest, pos + 1, 1)
     Cons(_, rest)   -> skip-line-comment(rest, pos + 1)
 
 fun lex-doc-comment( cs : list<char>, start : int, pos : int ) : div list<token>
@@ -238,8 +241,8 @@ fun lex-doc-comment( cs : list<char>, start : int, pos : int ) : div list<token>
   val end = pos + line.length
   match rest
     Nil -> [Token(TkDocComment(doc-text), Span(start, end)), Token(TkEof, Span(end, end))]
-    Cons('\n', rem) -> Cons(Token(TkDocComment(doc-text), Span(start, end)), lex-from(rem, end + 1, True))
-    _ -> Cons(Token(TkDocComment(doc-text), Span(start, end)), lex-from(rest, end, False))
+    Cons('\n', rem) -> Cons(Token(TkDocComment(doc-text), Span(start, end)), lex-from(rem, end + 1, 1))
+    _ -> Cons(Token(TkDocComment(doc-text), Span(start, end)), lex-from(rest, end, 0))
 
 fun is-hex-digit( c : char ) : bool
   c.is-digit || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')

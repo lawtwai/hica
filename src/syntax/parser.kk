@@ -1495,7 +1495,7 @@ fun parse-spawn-expr() : <div,parser> node
 // and the op signature reach codegen.
 // ---------------------------------------------------------------------------
 
-fun parse-actor-decl() : <div,parser> effect-def
+fun parse-actor-decl( doc : maybe<string> = Nothing ) : <div,parser> effect-def
 
   val t = expect("actor", fn(k) match k { TkActor -> True; _ -> False })
   val name = match peek()
@@ -1561,6 +1561,7 @@ fun parse-actor-decl() : <div,parser> effect-def
                           ret = TUnit)
   Effect-def(Span(t.span.start, end-tok.span.end),
              name,
+             doc,
              ops = [send-op],
              is-pub = False)
 
@@ -1645,9 +1646,6 @@ pub fun parse-program() : <div,parser> program
         globals := Cons(parse-global-decl(), globals)
         current-doc := Nothing
       TkActor ->
-        if !current-doc.is-nothing then
-          val _ = parse-error("doc comment ignored on actor declaration")
-          ()
         // M6 shipped an actor sugar that emitted (a) an effect declaration
         // with a per-actor `send_<name>` op and (b) a `pub fun with_<name>`
         // callback-installer helper. N5 retires both workarounds: the actor
@@ -1655,7 +1653,7 @@ pub fun parse-program() : <div,parser> program
         // users install instances with `spawn Name { … } as ref` and
         // dispatch with `ref.send(msg)` — per-instance dispatch is now the
         // canonical way. No helper is generated.
-        val edef = parse-actor-decl()
+        val edef = parse-actor-decl(current-doc)
         effects := Cons(edef, effects)
         current-doc := Nothing
 

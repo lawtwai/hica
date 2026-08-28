@@ -36,7 +36,7 @@ import http
 import semantics/analyser
 import semantics/docgen
 
-val version = "0.49.12"
+val version = "0.49.13"
 
 // Clean process exit without throwing exceptions
 extern hica-exit( code : int ) : a
@@ -2566,7 +2566,7 @@ fun print-usage()
 
 // Known effectful function → effect name mapping.
 val console-fns = ["println", "eprintln"]
-val fsys-fns    = ["read_file", "write_file", "read_lines", "write_lines"]
+val fsys-fns    = ["read_file", "write_file", "read_lines", "write_lines", "list_dir"]
 val io-fns      = ["input", "get_args", "get_env", "set_env", "set_env_nooverwrite"]
 val ndet-fns    = ["random"]
 

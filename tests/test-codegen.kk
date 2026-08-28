@@ -1540,6 +1540,26 @@ pub fun main() : io ()
       val errors = ds.filter(fn(d) d.message.contains("undefined"))
       assert/is-true(errors.length == 0)
 
+    dtest("list_dir emits hc-list-dir with .path")
+      val code = emit-typed-program("fun main() => list_dir(\".\")")
+      assert/is-true(code.contains("hc-list-dir("))
+      assert/is-true(code.contains(".path"))
+
+    dtest("list_dir imports std/os/dir and std/os/path")
+      val code = emit-typed-program("fun main() => list_dir(\".\")")
+      assert/is-true(code.contains("import std/os/dir"))
+      assert/is-true(code.contains("import std/os/path"))
+      assert/is-true(!code.contains("import std/os/file"))
+
+    dtest("no dir import when not using list_dir")
+      val code = emit-typed-program("fun main() => println(42)")
+      assert/is-true(!code.contains("std/os/dir"))
+
+    dtest("list_dir type-checks without error")
+      val ds = check-diagnostics("fun main() => list_dir(\".\")")
+      val errors = ds.filter(fn(d) d.message.contains("undefined"))
+      assert/is-true(errors.length == 0)
+
     // --- Result combinators ---
     dtest("unwrap emits match with throw")
       val code = emit-typed-program("fun main() => unwrap(Ok(42))")

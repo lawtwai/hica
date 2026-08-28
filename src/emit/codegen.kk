@@ -424,8 +424,13 @@ pub fun emit-program( p : program, mod-name : string = "main", imported-names : 
   val random-import = if program-uses-random(p) then "import std/num/random\nimport std/num/int32\n\n" else ""
   val bitwise-import = if !program-uses-random(p) && program-uses-bitwise(p) then "import std/num/int32\n\n" else ""
   val env-import = if program-uses-env(p) then "import std/os/env\n\n" else ""
-  val file-import = if program-uses-file-io(p) then "import std/os/file\nimport std/os/path\n\n" else ""
+  val uses-list-dir = program-uses-list-dir(p)
+  val file-import =
+    (if program-uses-file-io(p) then "import std/os/file\n" else "") ++
+    (if uses-list-dir then "import std/os/dir\n" else "") ++
+    (if program-uses-file-io(p) || uses-list-dir then "import std/os/path\n\n" else "")
   val file-read-helper = if program-uses-file-io(p) then file-read-helper-code else ""
+  val list-dir-helper = if uses-list-dir then list-dir-helper-code else ""
   val exec-import = if program-uses-exec(p) then "import std/os/process\n\n" else ""
   val readline-import = if program-uses-input(p) then "import std/os/readline\n\n" else ""
   val readline-helper = if program-uses-input(p) then readline-helper-code else ""
@@ -510,6 +515,7 @@ pub fun emit-program( p : program, mod-name : string = "main", imported-names : 
   set-env-helper ++
   readline-helper ++
   file-read-helper ++
+  list-dir-helper ++
   assert-helper ++
   show-maybe-helper ++
   show-result-helper ++
@@ -546,7 +552,7 @@ fun emit-decl( d : fun-decl, declared : list<string>, rec-names : list<string> =
     // dotenv effect (read file + set env)
     "dotenv_load", "dotenv_load_override", "dotenv_apply", "dotenv_apply_override",
     // fsys effect
-    "read_file", "write_file", "read_lines", "write_lines",
+    "read_file", "write_file", "read_lines", "write_lines", "list_dir",
     // exec effect
     "exec", "exec_args",
     // time effect
@@ -932,6 +938,8 @@ fun emit-expr( n : node, declared : list<string> ) : div string
           "hc-file-read(" ++ emit-expr(p, declared) ++ ".path)"
         (Var("write_file"), [p, content]) ->
           "(match try({ write-text-file(" ++ emit-expr(p, declared) ++ ".path, " ++ emit-expr(content, declared) ++ ") }) { Ok(_) -> Right(()); Error(hc__e) -> Left(hc__e.message) })"
+        (Var("list_dir"), [p]) ->
+          "hc-list-dir(" ++ emit-expr(p, declared) ++ ".path)"
         (Var("exec"), [cmd]) ->
           "(match run-system-read(" ++ emit-expr(cmd, declared) ++ ") { Ok(hc__c) -> Right(hc__c); Error(hc__e) -> Left(hc__e.message) })"
         (Var("exec_args"), [cmd, args]) ->
@@ -2250,6 +2258,40 @@ fun node-uses-file-io( n : node ) : div bool
     TupleIndex(t, _)        -> node-uses-file-io(t)
     _                       -> False
 
+// Check whether the program uses list_dir — needs `import std/os/dir`
+// (and `import std/os/path`, shared with the file-io import).
+fun program-uses-list-dir( p : program ) : div bool
+  p.decls.any(fn(d) node-uses-list-dir(d.body))
+  || p.tests.any(fn(t) node-uses-list-dir(t.body))
+
+fun node-uses-list-dir( n : node ) : div bool
+  match n.expr
+    Call(callee, args) ->
+      val is-list-dir-fn = match callee.expr
+        Var("list_dir") -> True
+        _               -> False
+      is-list-dir-fn || node-uses-list-dir(callee) || args.any(fn(a) node-uses-list-dir(a))
+    Let(_, _, init, body) -> node-uses-list-dir(init) || node-uses-list-dir(body)
+    VarDecl(_, _, init, body) -> node-uses-list-dir(init) || node-uses-list-dir(body)
+    Assign(_, value)      -> node-uses-list-dir(value)
+    Fun(_, body)          -> node-uses-list-dir(body)
+    Binary(_, lhs, rhs)   -> node-uses-list-dir(lhs) || node-uses-list-dir(rhs)
+    Unary(_, operand)     -> node-uses-list-dir(operand)
+    If(c, t, e)           -> node-uses-list-dir(c) || node-uses-list-dir(t) || node-uses-list-dir(e)
+    Block(stmts)          -> stmts.any(fn(s) node-uses-list-dir(s))
+    Match(scrut, arms)    -> node-uses-list-dir(scrut) || arms.any(fn(a) node-uses-list-dir(a.body) || a.guard.map(node-uses-list-dir).default(False))
+    Repeat(count, body)   -> node-uses-list-dir(count) || node-uses-list-dir(body)
+    ForIn(_, s, e, body)  -> node-uses-list-dir(s) || node-uses-list-dir(e) || node-uses-list-dir(body)
+    ForEach(_, coll, body) -> node-uses-list-dir(coll) || node-uses-list-dir(body)
+    While(cond, body)      -> node-uses-list-dir(cond) || node-uses-list-dir(body)
+    Loop(body)             -> node-uses-list-dir(body)
+    StringInterp(parts)   -> parts.any(fn(p) node-uses-list-dir(p))
+    LetTuple(_, init, body) -> node-uses-list-dir(init) || node-uses-list-dir(body)
+    EConstructor(_, cargs)  -> cargs.any(fn(a) node-uses-list-dir(a))
+    Tuple(elems)            -> elems.any(fn(e) node-uses-list-dir(e))
+    TupleIndex(t, _)        -> node-uses-list-dir(t)
+    _                       -> False
+
 // Check whether the program uses exec/exec_args
 // that require `import std/os/process`.
 fun program-uses-exec( p : program ) : div bool
@@ -2600,6 +2642,14 @@ val file-read-helper-code : string =
   "  match try({ read-text-file(hc__p) }) { Ok(hc__c) -> Right(hc__c); Error(hc__e) -> Left(hc__e.message) }\n" ++
   "\n"
 
+// Emitted when the program uses list_dir() — lists entries (base names, not
+// full paths) in a directory, converting Koka's `<fsys,exn>` list-directory
+// into a plain `either<list<string>,string>` result.
+val list-dir-helper-code : string =
+  "fun hc-list-dir(hc__p : path) : io either<string,list<string>>\n" ++
+  "  match try({ list-directory(hc__p) }) { Ok(hc__es) -> Right(hc__es.map(fn(hc__e) hc__e.nodir.string)); Error(hc__ex) -> Left(hc__ex.message) }\n" ++
+  "\n"
+
 val sort-helper-code : string =
   "fun hc-merge-with( xs, ys, cmp )\n" ++
   "  match xs\n" ++
@@ -2814,8 +2864,13 @@ pub fun emit-test-program( p : program, mod-name : string = "main", imported-nam
   val random-import = if program-uses-random(p) then "import std/num/random\nimport std/num/int32\n\n" else ""
   val bitwise-import = if !program-uses-random(p) && program-uses-bitwise(p) then "import std/num/int32\n\n" else ""
   val env-import = if program-uses-env(p) then "import std/os/env\n\n" else ""
-  val file-import = if program-uses-file-io(p) then "import std/os/file\nimport std/os/path\n\n" else ""
+  val uses-list-dir = program-uses-list-dir(p)
+  val file-import =
+    (if program-uses-file-io(p) then "import std/os/file\n" else "") ++
+    (if uses-list-dir then "import std/os/dir\n" else "") ++
+    (if program-uses-file-io(p) || uses-list-dir then "import std/os/path\n\n" else "")
   val file-read-helper = if program-uses-file-io(p) then file-read-helper-code else ""
+  val list-dir-helper = if uses-list-dir then list-dir-helper-code else ""
   val exec-import = if program-uses-exec(p) then "import std/os/process\n\n" else ""
   val readline-import = if program-uses-input(p) then "import std/os/readline\n\n" else ""
   val readline-helper = if program-uses-input(p) then readline-helper-code else ""
@@ -2930,6 +2985,7 @@ pub fun emit-test-program( p : program, mod-name : string = "main", imported-nam
   sort-helper ++
   readline-helper ++
   file-read-helper ++
+  list-dir-helper ++
   assert-helper ++
   show-maybe-helper ++
   show-result-helper ++

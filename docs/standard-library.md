@@ -88,6 +88,7 @@ fun main() {
 |----------|-----------|-------------|
 | `read_file(path)` | `(string) -> result<string, string>` | Read entire file; returns `Ok(content)` or `Err(message)` |
 | `write_file(path, content)` | `(string, string) -> ()` | Write a string to a file (throws on error) |
+| `list_dir(path)` | `(string) -> result<list<string>, string>` | List entry names (not full paths) in a directory; returns `Ok(names)` or `Err(message)` |
 
 ## Maybe Combinators
 

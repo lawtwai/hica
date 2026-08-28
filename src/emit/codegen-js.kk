@@ -249,6 +249,7 @@ pub fun js-runtime-preamble() : string
   "function read_file(path) { try { const fs = require('fs'); return fs.readFileSync(path, 'utf8'); } catch(e) { return null; } }\n" ++
   "function read_lines(path) { const s = read_file(path); return s !== null ? s.split('\\n') : []; }\n" ++
   "function write_file(path, content) { try { const fs = require('fs'); fs.writeFileSync(path, content); return {__tag:'Ok',value:null}; } catch(e) { return {__tag:'Err',value:e.message}; } }\n" ++
+  "function list_dir(path) { try { const fs = require('fs'); return {__tag:'Ok',value:fs.readdirSync(path)}; } catch(e) { return {__tag:'Err',value:e.message}; } }\n" ++
   "function exec(cmd) { try { const r = require('child_process').execSync(cmd, {encoding:'utf8'}); return {__tag:'Ok',value:r}; } catch(e) { return {__tag:'Err',value:e.message}; } }\n" ++
   "function exec_args(cmd, args) { return exec(cmd + ' ' + args.join(' ')); }\n" ++
   "function now_unix() { return Math.floor(Date.now() / 1000); }\n" ++

@@ -167,7 +167,7 @@ fun unwrap-block(n: node) : div node
 
 // Known effectful functions (mirror from main)
 val console-fns = ["println", "eprintln"]
-val fsys-fns    = ["read_file", "write_file", "read_lines", "write_lines"]
+val fsys-fns    = ["read_file", "write_file", "read_lines", "write_lines", "list_dir"]
 val io-fns      = ["input", "get_args", "get_env", "set_env", "set_env_nooverwrite"]
 val ndet-fns    = ["random"]
 

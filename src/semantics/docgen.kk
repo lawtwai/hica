@@ -8,7 +8,7 @@ import semantics/analyser
 
 // Known effectful functions
 val console-fns = ["println", "eprintln"]
-val fsys-fns    = ["read_file", "write_file", "read_lines", "write_lines"]
+val fsys-fns    = ["read_file", "write_file", "read_lines", "write_lines", "list_dir"]
 val io-fns      = ["input", "get_args", "get_env", "set_env", "set_env_nooverwrite"]
 
 // Walks a node to determine if it has certain effect triggers
@@ -130,6 +130,10 @@ fun format-decl-signature( decl : fun-decl ) : div string
     Nothing -> ""
   "fun " ++ decl.name ++ "(" ++ format-params(decl.params, decl.param-types) ++ ")" ++ ret-str
 
+fun format-effect-op-signature( op : effect-op ) : div string
+  val ps = op.params.map(fn((n, t)) n ++ ": " ++ t.show).join(", ")
+  "fun " ++ op.name ++ "(" ++ ps ++ ") : " ++ op.ret.show
+
 fun resolve-line-num( source : string, start-pos : int ) : int
   source.list.take(start-pos).filter(fn(c) c == '\n').length + 1
 
@@ -138,6 +142,7 @@ pub fun generate-architecture-md( prog : program, source : string, file : string
   val public-decls = prog.decls.filter(is-pub)
   val public-structs = prog.structs.filter(is-pub)
   val public-types = prog.types.filter(is-pub)
+  val public-effects = prog.effects.filter(is-pub)
   
   var md := "# Project Architecture & Export Directory: `" ++ file.path.basename ++ "`\n\n"
   
@@ -154,7 +159,7 @@ pub fun generate-architecture-md( prog : program, source : string, file : string
       md := md ++ "- `" ++ imp.path ++ "`" ++ pub-str ++ ext-str ++ "\n"
     md := md ++ "\n"
 
-  if !public-decls.is-nil || !public-structs.is-nil || !public-types.is-nil then
+  if !public-decls.is-nil || !public-structs.is-nil || !public-types.is-nil || !public-effects.is-nil then
     md := md ++ "## Public API Catalog\n\n"
     if !public-decls.is-nil then
       md := md ++ "### Public Functions\n\n"
@@ -179,6 +184,15 @@ pub fun generate-architecture-md( prog : program, source : string, file : string
         val doc-str = t.doc.default("*(No documentation provided)*")
         md := md ++ "- **`" ++ t.name ++ "`**: " ++ doc-str ++ "\n"
       md := md ++ "\n"
+
+    if !public-effects.is-nil then
+      md := md ++ "### Public Effects\n\n"
+      public-effects.foreach fn(e)
+        val doc-str = e.doc.default("*(No documentation provided)*")
+        md := md ++ "- **`" ++ e.name ++ "`**: " ++ doc-str ++ "\n"
+        e.ops.foreach fn(op)
+          md := md ++ "  - `" ++ format-effect-op-signature(op) ++ "`" ++ (match op.doc { Just(d) -> " — " ++ d; Nothing -> "" }) ++ "\n"
+      md := md ++ "\n"
   else
     md := md ++ "*(No public API exported)*\n"
     
@@ -188,8 +202,8 @@ pub fun generate-architecture-md( prog : program, source : string, file : string
 pub fun generate-models-md( prog : program ) : div string
   var md := "# Domain Data Models & Type Dictionary\n\n"
   
-  if prog.structs.is-nil && prog.types.is-nil then
-    md := md ++ "*(No structs or enums defined in this module)*\n"
+  if prog.structs.is-nil && prog.types.is-nil && prog.effects.is-nil then
+    md := md ++ "*(No structs, enums or effects defined in this module)*\n"
   else
     if !prog.structs.is-nil then
       md := md ++ "## Structs (Data Models)\n\n"
@@ -215,6 +229,19 @@ pub fun generate-models-md( prog : program ) : div string
         t.variants.foreach fn(v)
           val fields-str = if v.fields.is-nil then "" else "(" ++ v.fields.map(fn((f, fty)) f ++ ": " ++ fty.show).join(", ") ++ ")"
           md := md ++ "- `" ++ v.name ++ fields-str ++ "`\n"
+        md := md ++ "\n"
+
+    if !prog.effects.is-nil then
+      md := md ++ "## Effects (Capabilities)\n\n"
+      prog.effects.foreach fn(e)
+        val pub-str = if e.is-pub then " `pub`" else ""
+        md := md ++ "### Effect `" ++ e.name ++ "`" ++ pub-str ++ "\n"
+        if !e.doc.is-nothing then
+          md := md ++ e.doc.default("") ++ "\n\n"
+        md := md ++ "#### Operations\n"
+        e.ops.foreach fn(op)
+          val desc = match op.doc { Just(d) -> " — " ++ d; Nothing -> "" }
+          md := md ++ "- `" ++ format-effect-op-signature(op) ++ "`" ++ desc ++ "\n"
         md := md ++ "\n"
         
   md

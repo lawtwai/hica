@@ -36,6 +36,7 @@ import http
 import semantics/analyser
 import semantics/docgen
 
+// hica version number, it follows semver as much as possible
 val version = "0.49.13"
 
 // Clean process exit without throwing exceptions

@@ -36,6 +36,8 @@ Visit hica's [website](https://www.hica.dev/) for a tour of the language.
 
 [**hicurl**](https://github.com/cladam/hicurl) — a modern HTTP CLI inspired by the ergonomics of HTTPie and Curlie, built entirely in hica. Features native C execution speed, zero-`jq` JSON response filtering, offline dry-run inspection, and environment-aware routing.
 
+[**hedit**](https://github.com/cladam/hedit) - hedit is a lightweight, terminal-based text editor. It aims to pair modern editor UX (standard keybindings, mouse, multiple cursors, split views) with hica's algebraic effects and Perceus-based memory management (FBIP).
+
 [**HML**](https://github.com/cladam/hml) — hica Markup Language, a structured document and configuration format. The parser and API library are written in hica and published as a reusable package. Demonstrates multi-file libraries, recursive data types, and pattern matching on tree-shaped data.
 
 [**yml2hml**](https://www.hica.dev/docs/yml2hml/) — a standalone CLI tool that converts YAML files to HML format. A practical example of real-world parsing, recursive data structures, and formatted output.

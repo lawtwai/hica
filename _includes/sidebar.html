@@ -83,6 +83,11 @@
       <h3 class="nav-category-title">Ecosystem</h3>
       <ul>
         <li>
+          <a href="{{ '/docs/showcase' | relative_url }}" {% if page.url == "/docs/showcase/" %}class="active"{% endif %}>
+            Built with hica
+          </a>
+        </li>
+        <li>
           <a href="{{ '/docs/libraries' | relative_url }}" {% if page.url == "/docs/libraries/" %}class="active"{% endif %}>
             Libraries
           </a>

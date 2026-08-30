@@ -48,17 +48,45 @@ pub fun format-dep( d : dep-spec ) : string
 //   name: "github.com/owner/repo@tag"   (git dependency)
 //   name: "github.com/owner/repo"       (git, defaults to "main" branch)
 //   name: "path:../local-dir"           (local path dependency)
+//
+// Handles both layouts:
+//   @dependencies {
+//       name: "..."
+//   }
+// and the single-line compact form `@dependencies { ... }` / `@dependencies {}`.
+// The compact form must close `in-deps` on the same line it was opened on,
+// otherwise every following top-level block (e.g. `@description`) would be
+// swallowed as if it were more dependency lines.
 pub fun parse-deps-section( content : string ) : div list<dep-spec>
   val all-lines = content.lines
   var in-deps := False
   var result : list<dep-spec> := []
   all-lines.foreach fn(line)
     val trimmed = line.trim
-    if trimmed.starts-with("@dependencies").bool then
-      in-deps := True
-    elif in-deps && trimmed == "}" then
+    if !in-deps then
+      if trimmed.starts-with("@dependencies").bool then
+        val after = trimmed.slice.sslice/drop("@dependencies".count).string.trim-left
+        if after.starts-with("{").bool then
+          val body = after.slice.sslice/drop(1).string.trim
+          if body.ends-with("}").bool then
+            // Single-line block: parse the inner body, if any, and stay closed.
+            val inner = body.slice.sslice/extend(0 - 1).string.trim
+            if !inner.is-empty && !inner.starts-with("//").bool then
+              match parse-dep-line(inner)
+                Just(dep) -> result := Cons(dep, result)
+                Nothing   -> ()
+          else
+            in-deps := True
+        else
+          // `@dependencies` with the opening `{` on its own following line.
+          in-deps := True
+    elif trimmed == "}" then
       in-deps := False
-    elif in-deps && !trimmed.is-empty && !trimmed.starts-with("//").bool && trimmed != "{" then
+    elif trimmed.starts-with("@").bool then
+      // Unexpected new top-level block before a closing `}` — stop consuming
+      // rather than mis-parsing its fields as dependencies.
+      in-deps := False
+    elif !trimmed.is-empty && !trimmed.starts-with("//").bool then
       match parse-dep-line(trimmed)
         Just(dep) -> result := Cons(dep, result)
         Nothing   -> ()
@@ -101,6 +129,14 @@ fun dep-unquote( s : string ) : string
 
 pub fun hica-cache-dir() : io path
   homedir() / ".hica".path / "cache".path
+
+// A git dependency's URL (e.g. "github.com/owner/repo", or accidentally
+// "https://host/path" if a manifest field got mis-parsed as a dependency)
+// becomes a cache directory name. ':' is illegal in a Windows path
+// component, so percent-encode it before the string is ever turned into a
+// path — mirrors what a URL encoder would do to a scheme separator.
+fun cache-path-segment( s : string ) : string
+  s.replace-all(":", "%3A")
 
 // ---------------------------------------------------------------------------
 // Fetch
@@ -251,7 +287,7 @@ fun fetch-git( name : string, url : string, tag : string ) : io maybe<path>
       Nothing
     (Just(safe-url), Just(safe-tag)) ->
       val cache = hica-cache-dir()
-      val dep-dir = cache / safe-url.path / safe-tag.path
+      val dep-dir = cache / cache-path-segment(safe-url).path / safe-tag.path
       if is-directory(dep-dir) then
         Just(dep-dir)
       else
@@ -399,7 +435,7 @@ pub fun dep-is-cached( d : dep-spec, base-dir : path ) : io bool
   match d.source
     GitDep(url, tag) ->
       match safe-shell-arg(url)
-        Just(u) -> is-directory(hica-cache-dir() / u.path / tag.path)
+        Just(u) -> is-directory(hica-cache-dir() / cache-path-segment(u).path / tag.path)
         Nothing -> False
     PathDep(p) -> is-directory(base-dir / p.path)
     RegistryDep(_) ->
@@ -481,7 +517,7 @@ fun dep-manifest-path( d : dep-spec, base-dir : path ) : io maybe<path>
   val root = match d.source
     GitDep(url, tag) ->
       match safe-shell-arg(url)
-        Just(u) -> Just(hica-cache-dir() / u.path / tag.path)
+        Just(u) -> Just(hica-cache-dir() / cache-path-segment(u).path / tag.path)
         Nothing -> Nothing
     PathDep(p) -> Just(base-dir / p.path)
     RegistryDep(version) ->

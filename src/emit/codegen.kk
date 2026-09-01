@@ -154,7 +154,7 @@ fun marshal-field( fname : string ) : string
     then "hc-" ++ fname
   else fname
 
-fun emit-struct-def( sd : struct-def ) : div string
+fun emit-struct-def( sd : struct-def, structs : list<struct-def>, types : list<type-def> ) : div string
   val tname = sd.name.struct-type-name
   val pub-str = if sd.is-pub then "pub " else ""
   // Koka uses `abstract struct` (no `pub` prefix) to make a type opaque:
@@ -167,14 +167,29 @@ fun emit-struct-def( sd : struct-def ) : div string
   // Emit a show function for the struct
   val show-parts = sd.fields.map fn((fname, ftype))
     "\"" ++ fname ++ ": \" ++ " ++ emit-show-call(ftype, "p." ++ marshal-field(fname))
-  // Recursive structs need the `div` effect on show
+  // A struct needs the `div` effect on its derived show/(==) when a field is
+  // (a) the struct itself (direct self-recursion), (b) another struct whose
+  // own derived show/== is already div (nested recursive struct), or (c) a
+  // recursive `type` (ADT) — e.g. a `Leaf | Split(..., PaneNode, PaneNode)`
+  // tree stored as a field. (c) was missing until M15's `PaneNode` surfaced
+  // it: the parser records every user type name (struct AND `type`/enum
+  // alike) as `TStruct(name)` in field annotations (see
+  // references-type-negatively's note), so a field whose *declared* type is
+  // a recursive `type` looked exactly like a plain, non-recursive struct
+  // field to `is-rec` below — the emitted show/(==) stayed unannotated
+  // (`: string`/`: bool`) even though it calls the field type's own `div`
+  // show/(==), giving "effects do not match, inferred <div|_e>, expected
+  // total" the moment Koka type-checks the (possibly never-called) derived
+  // function. See documentation/bugs/hedit-hica-issues.md issue 2 follow-up.
   val is-rec = sd.fields.any(fn((_, ft)) ft.references-struct(sd.name))
-  val effect-ann = if is-rec then " : div string" else " : string"
+  val refs-rec-struct = sd.fields.any(fn((_, ft)) ft.references-recursive-struct(structs))
+  val refs-rec-type = sd.fields.any(fn((_, ft)) ft.references-recursive-type(types))
+  val effect-ann = if is-rec || refs-rec-struct || refs-rec-type then " : div string" else " : string"
   val show-fn = pub-str ++ "fun " ++ tname ++ "/show(p : " ++ tname ++ ")" ++ effect-ann ++ "\n" ++
     "  \"" ++ sd.name ++ "(\" ++ " ++ show-parts.join(" ++ \", \" ++ ") ++ " ++ \")\""
   // Auto-derived (==) — field-wise structural equality. See
   // documentation/bugs/hedit-hica-issues.md issue 2.
-  val eq-effect-ann = if is-rec then " : div bool" else " : bool"
+  val eq-effect-ann = if is-rec || refs-rec-struct || refs-rec-type then " : div bool" else " : bool"
   val eq-body =
     if sd.fields.is-nil then
       "  True"
@@ -368,6 +383,28 @@ fun references-recursive-struct( t : hica-type, structs : list<struct-def> ) : d
     TFun(params, ret) -> params.any(fn(p) p.references-recursive-struct(structs)) || ret.references-recursive-struct(structs)
     _ -> False
 
+// Whether a `type`/enum declaration is directly self-recursive (a variant
+// field references the type's own name) — same shape as emit-type-def's
+// local `is-rec`, factored out so emit-struct-def can reuse it below.
+fun type-def-is-recursive( td : type-def ) : div bool
+  td.variants.any(fn(vd) vd.fields.any(fn((_, ft)) ft.references-type(td.name)))
+
+// Check if a type contains a reference to a recursive `type`/enum (whose
+// show/(==) is div). The parser records every user-defined type name (both
+// `struct` and `type` declarations) as `TStruct(name)` in field annotations
+// (see references-type-negatively's note above), so — unlike
+// references-recursive-struct — this must probe the TStruct arm against
+// `types`, not just TEnum.
+fun references-recursive-type( t : hica-type, types : list<type-def> ) : div bool
+  match t
+    TStruct(sn) -> types.any(fn(td) td.name == sn && td.type-def-is-recursive)
+    TEnum(en)   -> types.any(fn(td) td.name == en && td.type-def-is-recursive)
+    TMaybe(inner) -> inner.references-recursive-type(types)
+    TList(inner) -> inner.references-recursive-type(types)
+    TTuple(ts) -> ts.any(fn(tt) tt.references-recursive-type(types))
+    TFun(params, ret) -> params.any(fn(p) p.references-recursive-type(types)) || ret.references-recursive-type(types)
+    _ -> False
+
 // Emit a show call for a specific type
 fun emit-show-call( t : hica-type, expr-str : string ) : div string
   match t
@@ -467,7 +504,7 @@ pub fun emit-program( p : program, mod-name : string = "main", imported-names : 
   val show-result-helper = show-result-helper-code
   val type-defs = p.types.map(fn(td) emit-type-def(td, p.structs, p.types)).join("\n\n")
   val type-sep = if p.types.is-nil then "" else "\n\n"
-  val struct-defs = p.structs.map(fn(sd) emit-struct-def(sd)).join("\n\n")
+  val struct-defs = p.structs.map(fn(sd) emit-struct-def(sd, p.structs, p.types)).join("\n\n")
   val struct-sep = if p.structs.is-empty then "" else "\n\n"
   // N1 named-effects promotion (design doc §7.6): any effect that is `spawn`ed
   // anywhere in the program must be emitted as `named effect` with `fun` ops,
@@ -2921,7 +2958,7 @@ pub fun emit-test-program( p : program, mod-name : string = "main", imported-nam
     if acc.any(fn(a) a == m) || hica-mod-names.any(fn(a) a == m) then acc else acc ++ [m]
   )
   val extra-kk-imports = extra-dedup.map(fn(m) "import " ++ m ++ "\n").join("") ++ (if extra-dedup.is-nil then "" else "\n")
-  val struct-defs = p.structs.map(fn(sd) emit-struct-def(sd)).join("\n\n")
+  val struct-defs = p.structs.map(fn(sd) emit-struct-def(sd, p.structs, p.types)).join("\n\n")
   val struct-sep = if p.structs.is-empty then "" else "\n\n"
   val type-defs = p.types.map(fn(td) emit-type-def(td, p.structs, p.types)).join("\n\n")
   val type-sep = if p.types.is-nil then "" else "\n\n"

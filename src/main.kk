@@ -37,7 +37,7 @@ import semantics/analyser
 import semantics/docgen
 
 // hica version number, it follows semver as much as possible
-val version = "0.49.14"
+val version = "0.49.15"
 
 // Clean process exit without throwing exceptions
 extern hica-exit( code : int ) : a

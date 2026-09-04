@@ -8,6 +8,10 @@
   (map_literal)
   (list_literal)
   (param_list)
+  (effect_decl)
+  (actor_decl)
+  (handle_expr)
+  (spawn_expr)
 ] @indent
 
 ; Decrease indent for closing delimiter

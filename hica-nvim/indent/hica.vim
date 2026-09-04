@@ -7,10 +7,10 @@ if exists("b:did_indent")
 endif
 let b:did_indent = 1
 
-setlocal indentexpr=hicaIndent(v:lnum)
+setlocal indentexpr=<SID>hicaIndent(v:lnum)
 setlocal indentkeys=0{,0},0),0],!^F,o,O,e
 
-function! hicaIndent(lnum) abort
+function! s:hicaIndent(lnum) abort
   let prev_lnum = prevnonblank(a:lnum - 1)
   if prev_lnum == 0
     return 0

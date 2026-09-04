@@ -154,6 +154,7 @@
     }
     /* Syntax token colors (Catppuccin Mocha) */
     .tok-comment { color: #6c7086; font-style: italic; }
+    .tok-doc-comment { color: var(--teal); font-style: italic; }
     .tok-string { color: var(--green); }
     .tok-escape { color: var(--peach); }
     .tok-interpolation { color: var(--blue); }
@@ -611,9 +612,10 @@ function tokenizeLine(line) {
   let result = '';
   let i = 0;
   while (i < line.length) {
-    // Comment
+    // Comment (/// doc comment vs // regular comment)
     if (line[i] === '/' && line[i+1] === '/') {
-      result += '<span class="tok-comment">' + esc(line.slice(i)) + '</span>';
+      const cls = line[i+2] === '/' ? 'tok-doc-comment' : 'tok-comment';
+      result += '<span class="' + cls + '">' + esc(line.slice(i)) + '</span>';
       return result;
     }
     // String
@@ -703,7 +705,7 @@ function tokenizeLine(line) {
       // Check previous word for `fun` declaration
       const before = result.replace(/<[^>]*>/g, '');
       const isFunDecl = /\bfun\s*$/.test(before);
-      if (/^(if|else|match|for|in|while|loop|repeat|break|continue|fun|let|var|struct|type|extern|import|from|pub|test)$/.test(word)) {
+      if (/^(if|else|match|for|in|while|loop|repeat|break|continue|fun|let|var|struct|type|extern|import|from|pub|test|effect|actor|handle|spawn|with|as|opaque|priv|noinline)$/.test(word)) {
         result += '<span class="tok-keyword">' + word + '</span>';
       } else if (/^(true|false|None)$/.test(word)) {
         result += '<span class="tok-constant">' + word + '</span>';

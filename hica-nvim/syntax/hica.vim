@@ -10,9 +10,9 @@ endif
 " ─── Keywords ────────────────────────────────────────────────────────────────
 
 syntax keyword hicaControl    if else match for in while loop repeat break continue return
-syntax keyword hicaDecl       fun let var struct type extern actor spawn effect haandle with
+syntax keyword hicaDecl       fun let var struct type extern actor spawn effect handle with
 syntax keyword hicaImport     import from
-syntax keyword hicaModifier   pub
+syntax keyword hicaModifier   pub opaque priv noinline as
 syntax keyword hicaTest       test
 
 " ─── Literals ─────────────────────────────────────────────────────────────────
@@ -44,8 +44,11 @@ syntax match   hicaTestDecl   "\<test\s\+\"[^\"]*\"" contains=hicaTest,hicaTestN
 syntax match   hicaFuncCall   "\<[a-z_][a-zA-Z0-9_]*\ze\s*("
 
 " ─── Comments ────────────────────────────────────────────────────────────────
+" Doc comment (///) is matched by an explicit negative lookahead on hicaComment
+" so ordering between the two rules doesn't matter.
 
-syntax match   hicaComment    "//.*$"
+syntax match   hicaDocComment "///.*$"
+syntax match   hicaComment    "//\%(/\)\@!.*$"
 
 " ─── Strings ─────────────────────────────────────────────────────────────────
 
@@ -103,6 +106,7 @@ highlight default link hicaFuncCall   Function
 highlight default link hicaTestName   String
 
 highlight default link hicaComment    Comment
+highlight default link hicaDocComment SpecialComment
 
 highlight default link hicaString     String
 highlight default link hicaEscape     SpecialChar

@@ -6,7 +6,8 @@
 
 ; ─── Comments ────────────────────────────────────────────────────────────────
 
-(comment) @comment @spell
+(comment)     @comment @spell
+(doc_comment) @comment.documentation @spell
 
 ; ─── Keywords ────────────────────────────────────────────────────────────────
 
@@ -21,16 +22,22 @@
 
 [
   "fun" "let" "var" "struct" "type" "extern"
+  "effect" "actor" "handle" "spawn" "with" "as"
 ] @keyword
 
 (import_decl "import" @keyword.import)
 (import_decl "from"   @keyword.import)
 (import_decl "pub"    @keyword.modifier)
 
-(function_decl "pub"  @keyword.modifier)
-(struct_decl   "pub"  @keyword.modifier)
-(type_decl     "pub"  @keyword.modifier)
-(extern_decl   "pub"  @keyword.modifier)
+(function_decl "pub"      @keyword.modifier)
+(function_decl "noinline" @keyword.modifier)
+(struct_decl   "pub"      @keyword.modifier)
+(struct_decl   "opaque"   @keyword.modifier)
+(struct_decl   "priv"     @keyword.modifier)
+(type_decl     "pub"      @keyword.modifier)
+(extern_decl   "pub"      @keyword.modifier)
+(effect_decl   "pub"      @keyword.modifier)
+(actor_decl    "pub"      @keyword.modifier)
 
 (test_decl "test" @keyword.test)
 
@@ -42,9 +49,14 @@
 
 (function_decl   return_type: (_) @type)
 (extern_decl     return_type: (_) @type)
+(effect_op_decl  return_type: (_) @type)
 (param           type: (_) @type)
 (let_stmt        type: (_) @type)
 (var_stmt        type: (_) @type)
+
+(handle_expr effect: (type_identifier) @type)
+(spawn_expr  effect: (type_identifier) @type)
+(effect_row  (type_identifier) @type)
 
 ; ─── Declarations ─────────────────────────────────────────────────────────────
 
@@ -53,6 +65,14 @@
 (struct_decl   name: (type_identifier) @type.definition)
 (type_decl     name: (type_identifier) @type.definition)
 (type_variant  name: (type_identifier) @constructor)
+
+(effect_decl    name: (type_identifier) @type.definition)
+(effect_op_decl name: (identifier)      @function)
+
+(actor_decl   name: (type_identifier) @type.definition)
+(actor_method name: (identifier)      @function)
+
+(handle_arm op: (identifier) @function.call)
 
 (test_decl name: (string_literal) @string.special.test)
 
@@ -77,6 +97,9 @@
 
 (assign_stmt
   target: (identifier) @variable)
+
+(var_binding name: (identifier) @variable)
+(spawn_expr  name: (identifier) @variable)
 
 (identifier) @variable
 

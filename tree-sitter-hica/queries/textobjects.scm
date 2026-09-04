@@ -4,10 +4,15 @@
 ; @function.outer / @function.inner
 (function_decl) @function.outer
 (function_decl body: (block) @function.inner)
+(effect_op_decl) @function.outer
+(actor_method) @function.outer
+(actor_method body: (_) @function.inner)
 
 ; @class.outer / @class.inner  (structs and types)
 (struct_decl) @class.outer
 (type_decl)   @class.outer
+(effect_decl) @class.outer
+(actor_decl)  @class.outer
 
 ; @parameter.outer / @parameter.inner
 (param) @parameter.outer

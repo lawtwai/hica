@@ -20,6 +20,10 @@
     "comments": {
       "patterns": [
         {
+          "name": "comment.line.documentation.hica",
+          "match": "///.*$"
+        },
+        {
           "name": "comment.line.double-slash.hica",
           "match": "//.*$"
         }
@@ -95,6 +99,10 @@
         {
           "name": "keyword.import.hica",
           "match": "\\b(import|from|pub)\\b"
+        },
+        {
+          "name": "storage.modifier.hica",
+          "match": "\\b(opaque|priv|noinline|as)\\b"
         },
         {
           "name": "keyword.test.hica",

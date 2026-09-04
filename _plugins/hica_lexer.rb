@@ -21,6 +21,10 @@ module Rouge
         import from pub
       ).freeze
 
+      KEYWORD_MODIFIER = %w(
+        opaque priv noinline as
+      ).freeze
+
       KEYWORD_TEST = %w(
         test
       ).freeze
@@ -38,6 +42,9 @@ module Rouge
       ).freeze
 
       state :root do
+        # Doc comments (must come before plain line comments)
+        rule %r(///.*$), Comment::Doc
+
         # Line comments
         rule %r(//.*$), Comment::Single
 
@@ -51,6 +58,7 @@ module Rouge
         rule %r/\b(#{KEYWORD_CONTROL.join('|')})\b/, Keyword
         rule %r/\b(#{KEYWORD_DECLARATION.join('|')})\b/, Keyword::Declaration
         rule %r/\b(#{KEYWORD_IMPORT.join('|')})\b/, Keyword::Namespace
+        rule %r/\b(#{KEYWORD_MODIFIER.join('|')})\b/, Keyword::Pseudo
 
         # Built-in constants
         rule %r/\b(#{BUILTIN_CONSTANTS.join('|')})\b/, Keyword::Constant

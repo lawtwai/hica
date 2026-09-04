@@ -14,7 +14,7 @@
 module.exports = grammar({
   name: "hica",
 
-  extras: ($) => [/\s/, $.comment, ";"],
+  extras: ($) => [/\s/, $.comment, $.doc_comment, ";"],
 
   // Avoid ambiguity: function calls vs parenthesised expressions,
   // TypeName { } vs expression followed by a block,
@@ -38,7 +38,9 @@ module.exports = grammar({
         $.struct_decl,
         $.type_decl,
         $.test_decl,
-        $.extern_decl
+        $.extern_decl,
+        $.effect_decl,
+        $.actor_decl
       ),
 
     // ─── Imports ─────────────────────────────────────────────────────────────
@@ -68,10 +70,11 @@ module.exports = grammar({
     function_decl: ($) =>
       seq(
         optional("pub"),
+        optional("noinline"),
         "fun",
         field("name", $.identifier),
         field("params", $.param_list),
-        optional(seq(":", field("return_type", $._type))),
+        optional(seq(":", optional($.effect_row), field("return_type", $._type))),
         field("body", choice(
           $.block,
           seq("=>", $._expression)   // shorthand: fun f() => expr
@@ -91,11 +94,13 @@ module.exports = grammar({
     struct_decl: ($) =>
       seq(
         optional("pub"),
+        optional("opaque"),
         "struct",
         field("name", $.type_identifier),
         "{",
         commaSep($.struct_field_decl),
-        "}"
+        "}",
+        optional("priv")
       ),
 
     struct_field_decl: ($) =>
@@ -149,6 +154,48 @@ module.exports = grammar({
         field("return_type", $._type)
       ),
 
+    // ─── Effect declarations ──────────────────────────────────────────────────
+
+    effect_decl: ($) =>
+      seq(
+        optional("pub"),
+        "effect",
+        field("name", $.type_identifier),
+        "{",
+        repeat($.effect_op_decl),
+        "}"
+      ),
+
+    effect_op_decl: ($) =>
+      seq(
+        "fun",
+        field("name", $.identifier),
+        field("params", $.param_list),
+        optional(seq(":", field("return_type", $._type)))
+      ),
+
+    // ─── Actor declarations ────────────────────────────────────────────────────
+    // `actor Name { var ... ; op(params) => body ... }` — sugar over
+    // effect + spawn + ref.op(); state/behaviour here are informational.
+
+    actor_decl: ($) =>
+      seq(
+        optional("pub"),
+        "actor",
+        field("name", $.type_identifier),
+        "{",
+        repeat(choice($.var_stmt, $.actor_method)),
+        "}"
+      ),
+
+    actor_method: ($) =>
+      seq(
+        field("name", $.identifier),
+        field("params", $.param_list),
+        "=>",
+        field("body", $._expression)
+      ),
+
     // ─── Types ───────────────────────────────────────────────────────────────
 
     _type: ($) =>
@@ -174,8 +221,12 @@ module.exports = grammar({
 
     tuple_type: ($) => seq("(", commaSep($._type), ")"),
 
+    // (A, B) -> R   or   (A, B) -> <E1, E2> R  (effect row)
     function_type: ($) =>
-      seq("(", commaSep($._type), ")", "->", $._type),
+      seq("(", commaSep($._type), ")", "->", optional($.effect_row), $._type),
+
+    // <Db>  <A, B>  — the set of user-defined effects a callback may use
+    effect_row: ($) => seq("<", commaSep($.type_identifier), ">"),
 
     // ─── Block ───────────────────────────────────────────────────────────────
 
@@ -237,6 +288,8 @@ module.exports = grammar({
         $.loop_expr,
         $.repeat_expr,
         $.lambda_expr,
+        $.handle_expr,
+        $.spawn_expr,
         $.block,
         $.struct_literal,
         $.struct_update,
@@ -244,6 +297,7 @@ module.exports = grammar({
         $.map_literal,
         $.tuple_expr,
         $.paren_expr,
+        $.unit_literal,
         $.string_literal,
         $.char_literal,
         $.float_literal,
@@ -408,6 +462,53 @@ module.exports = grammar({
     repeat_expr: ($) =>
       seq("repeat", "(", field("count", $._expression), ")", field("body", $.block)),
 
+    // ─── Effect handlers (handle / spawn) ────────────────────────────────────
+
+    // handle Effect { arms } (with var ...)? in { block }
+    handle_expr: ($) =>
+      seq(
+        "handle",
+        field("effect", $.type_identifier),
+        "{",
+        commaSep($.handle_arm),
+        "}",
+        optional(field("state", $.with_clause)),
+        "in",
+        field("body", $.block)
+      ),
+
+    // spawn Effect { arms } (with var ...)? as ident
+    spawn_expr: ($) =>
+      seq(
+        "spawn",
+        field("effect", $.type_identifier),
+        "{",
+        commaSep($.handle_arm),
+        "}",
+        optional(field("state", $.with_clause)),
+        "as",
+        field("name", $.identifier)
+      ),
+
+    // incr() => count = count + 1   (arm body may be a bare assignment)
+    handle_arm: ($) =>
+      seq(
+        field("op", $.identifier),
+        "(",
+        commaSep(field("param", $.identifier)),
+        ")",
+        "=>",
+        field("body", choice($._expression, $.assign_stmt))
+      ),
+
+    // with var count = 0, var size = 0
+    with_clause: ($) => seq("with", commaSep1($.var_binding)),
+
+    // prec(2, ...) beats the binary "in" (membership) operator's prec(1) so
+    // the value expression doesn't swallow the handle_expr's trailing `in`.
+    var_binding: ($) =>
+      seq("var", field("name", $.identifier), "=", field("value", prec(2, $._expression))),
+
     // ─── Lambda ──────────────────────────────────────────────────────────────
 
     // () => body  (params accept expressions at grammar level; semantic checker validates identifiers)
@@ -461,6 +562,9 @@ module.exports = grammar({
     // (expr)  — parenthesized grouping; disambiguated from lambda by absence of =>
     paren_expr: ($) => seq("(", $._expression, ")"),
 
+    // ()  — the unit value
+    unit_literal: (_) => seq("(", ")"),
+
     // ─── Literals ─────────────────────────────────────────────────────────────
 
     string_literal: ($) =>
@@ -510,7 +614,10 @@ module.exports = grammar({
 
     // ─── Comments ─────────────────────────────────────────────────────────────
 
-    comment: (_) => /\/\/.*/,
+    // /// doc comment — matched with higher precedence than a plain // comment
+    doc_comment: (_) => token(prec(2, /\/\/\/.*/)),
+
+    comment: (_) => token(prec(1, /\/\/.*/)),
   },
 });
 

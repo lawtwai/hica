@@ -84,7 +84,7 @@ irm https://www.hica.dev/install.ps1 | iex
 
 ### Build from source
 
-Requires [Koka](https://koka-lang.github.io/koka/doc/book.html#install) ≥ 3.2.
+Requires [Koka](https://koka-lang.github.io/koka/doc/book.html#install) ≥ 3.2.9
 
 ```sh
 git clone --recurse-submodules https://github.com/cladam/hica.git

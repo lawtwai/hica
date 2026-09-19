@@ -37,7 +37,7 @@ import semantics/analyser
 import semantics/docgen
 
 // hica version number, it follows semver as much as possible
-val version = "0.49.15"
+val version = "0.49.16"
 
 // Clean process exit without throwing exceptions
 extern hica-exit( code : int ) : a
@@ -697,7 +697,7 @@ fun collect-project-kk-paths( hc-file : path, include-dirs : list<string>, visit
   else
     val own-kk = hc-file.dirname.path / (safe-module-name(hc-file.stemname) ++ ".kk").path
     val base-dir = hc-file.dirname.path
-    val imports = try({ run-parser-program(lex(read-text-file(hc-file))).imports }) fn(_exn) { [] }
+    val imports = try(fn(_exn) { [] }) { run-parser-program(lex(read-text-file(hc-file))).imports }
     val local-imports = imports.filter(fn(i) !i.is-extern && !i.path.starts-with("std/").bool)
     val nested = local-imports.foldl([], fn(acc, imp)
       acc ++ collect-project-kk-paths(resolve-import(imp.path, base-dir, include-dirs), include-dirs, Cons(key, visited))
@@ -1149,7 +1149,7 @@ fun repl-eval-lines( file-lines : list<string>, prelude : program, state : repl-
 
 fun repl-loop( prelude : program, state : repl-state )
   print("hica=> ")
-  val result = try({ Just(readline()) }) fn(_exn) { Nothing }
+  val result = try(fn(_exn) { Nothing }) { Just(readline()) }
   match result
     Nothing -> println("\nBye!")  // EOF (Ctrl-D or end of pipe)
     Just(input) ->
